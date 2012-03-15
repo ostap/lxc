@@ -219,7 +219,7 @@ mkdir -p $cache
 if [ -n "$tarball" ]; then
 	url2="$tarball"
 else
-	url1=`ubuntu-cloudimg-query precise daily $arch --format "%{url}\n"`
+	url1=`ubuntu-cloudimg-query $release daily $arch --format "%{url}\n"`
 	url2=`echo $url1 | sed -e 's/.tar.gz/-root\0/'`
 fi
 
