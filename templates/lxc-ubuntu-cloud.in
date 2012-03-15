@@ -177,7 +177,7 @@ do
     esac
 done
 
-if [ $debug -eq ]; then
+if [ $debug -eq 1 ]; then
     set -x
 fi
 
