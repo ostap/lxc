@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# template script for generating ubuntu container for LXC based on daily cloud
+# template script for generating ubuntu container for LXC based on released cloud
 # images
 #
 # Copyright © 2012 Serge Hallyn <serge.hallyn@canonical.com>
@@ -105,6 +105,7 @@ Generic Options
 [ -C | --cloud ]: Configure container for use with meta-data service, defaults to no
 [ -T | --tarball ]: Location of tarball
 [ -d | --debug ]: Run with 'set -x' to debug errors
+[ -s | --stream]: Use specified stream rather than 'released'
 
 Options, mutually exclusive of "-C" and "--cloud":
   [ -i | --hostid ]:    HostID for cloud-init, defaults to random string
@@ -116,7 +117,7 @@ EOF
     return 0
 }
 
-options=$(getopt -o a:hp:r:n:Fi:CLS:T:d -l arch:,help,path:,release:,name:,flush-cache,hostid:,auth-key:,cloud,no_locales,tarball:,debug -- "$@")
+options=$(getopt -o a:hp:r:n:Fi:CLS:T:ds: -l arch:,help,path:,release:,name:,flush-cache,hostid:,auth-key:,cloud,no_locales,tarball:,debug,stream: -- "$@")
 if [ $? -ne 0 ]; then
     usage $(basename $0)
     exit 1
@@ -147,6 +148,10 @@ else
     elif [ "$arch" = "x86_64" ]; then
         arch="amd64"
     elif [ "$arch" = "armv7l" ]; then
+        # note: arm images don't exist before oneiric;  are called armhf in
+        # precise;  and are not supported by the query, so we don't actually
+        # support them yet (see check later on).  When Query2 is available,
+        # we'll use that to enable arm images.
         arch="armel"
     fi
 fi
@@ -156,6 +161,7 @@ hostarch=$arch
 cloud=0
 locales=1
 flushcache=0
+stream="released"
 while true
 do
     case "$1" in
@@ -172,6 +178,7 @@ do
     -L|--no_locales)   locales=0; shift 2;;
     -T|--tarball)      tarball=$2; shift 2;;
     -d|--debug)        debug=1; shift 1;;
+    -s|--stream)       stream=$2; shift 2;;
     --)                shift 1; break ;;
         *)              break ;;
     esac
@@ -192,6 +199,11 @@ fi
 
 if [ $arch != "i386" -a $arch != "amd64" ]; then
     echo "Only i386 and amd64 are supported by the ubuntu cloud template."
+    exit 1
+fi
+
+if [ "$stream" != "daily" -a "$stream" != "released" ]; then
+    echo "Only 'daily' and 'released' streams are supported"
     exit 1
 fi
 
@@ -219,11 +231,46 @@ mkdir -p $cache
 if [ -n "$tarball" ]; then
 	url2="$tarball"
 else
-	url1=`ubuntu-cloudimg-query $release daily $arch --format "%{url}\n"`
+	url1=`ubuntu-cloudimg-query $release $stream $arch --format "%{url}\n"`
 	url2=`echo $url1 | sed -e 's/.tar.gz/-root\0/'`
 fi
 
 filename=`basename $url2`
+
+buildcleanup()
+{
+    cd $rootfs
+    umount -l $cache/$xdir || true
+    rm -rf $cache
+}
+
+# if the release doesn't have a *-rootfs.tar.gz, then create one from the
+# cloudimg.tar.gz by extracting the .img, mounting it loopback, and creating
+# a tarball from the mounted image.
+build_root_tgz()
+{
+    url=$1
+    filename=$2
+
+    xdir=`mktemp -d -p .`
+    tarname=`basename $url`
+    imgname="`basename $tarname .tar.gz`.img"
+    trap buildcleanup EXIT
+    if [ $flushcache -eq 1 -o ! -f $cache/$tarname ]; then
+        rm -f $tarname
+        echo "Downloading cloud image from $url"
+        wget $url || { echo "Couldn't find cloud image $url."; exit 1; }
+    fi
+    echo "Creating new cached cloud image rootfs"
+    tar zxf $tarname $imgname
+    mount -o loop $imgname $xdir
+    (cd $xdir; tar zcf ../$filename .)
+    umount $xdir
+    rm -f $tarname $imgname
+    rmdir $xdir
+    echo "New cloud image cache created"
+    trap EXIT
+}
 
 mkdir -p /var/lock/subsys/
 (
@@ -236,10 +283,10 @@ mkdir -p /var/lock/subsys/
     fi
 
     if [ ! -f $filename ]; then
-       wget $url2
+       wget $url2 || build_root_tgz $url1 $filename
     fi
 
-    echo "Extracting rootfs"
+    echo "Extracting container rootfs"
     mkdir -p $rootfs
     cd $rootfs
     tar -zxf $cache/$filename
@@ -294,6 +341,7 @@ EOF
 	fi
 
     	chroot $rootfs /usr/sbin/usermod -U ubuntu
+    	echo "ubuntu:ubuntu" | chroot $rootfs chpasswd
 	echo "Please login as user ubuntu with password ubuntu."
 
    else
