@@ -223,6 +223,7 @@ struct lxc_conf {
 	char *ttydir;
 	int close_all_fds;
 	struct lxc_list hooks[NUM_LXC_HOOKS];
+	char *seccomp;  // filename with the seccomp rules
 #if HAVE_APPARMOR
 	char *aa_profile;
 #endif
