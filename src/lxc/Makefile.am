@@ -50,6 +50,7 @@ liblxc_so_SOURCES = \
         genl.c genl.h \
 	\
 	caps.c caps.h \
+	seccmp.c seccomp.h \
 	mainloop.c mainloop.h \
 	af_unix.c af_unix.h \
 	\
