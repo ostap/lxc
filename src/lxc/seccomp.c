@@ -39,10 +39,72 @@ lxc_log_define(lxc_seccomp, lxc);
  * the directives must include 'whitelist' (only type of policy currently
  * supported) and can include 'debug' (though debug is not yet supported).
  */
+static int parse_config(FILE *f, struct lxc_conf *conf)
+{
+	char line[1024];
+	int ret, version;
+
+	ret = fscanf(f, "%d\n", &version);
+	if (ret != 1 || version != 1) {
+		ERROR("invalid version");
+		return -1;
+	}
+	if (!fgets(line, 1024, f)) {
+		ERROR("invalid config file");
+		return -1;
+	}
+	if (!strstr(line, "whitelist")) {
+		ERROR("only whitelist policy is supported");
+		return -1;
+	}
+	if (strstr(line, "debug")) {
+		ERROR("debug not yet implemented");
+		return -1;
+	}
+	/* now read in the whitelist entries one per line */
+	while (fgets(line, 1024, f)) {
+		int nr;
+		ret = sscanf(line, "%d", &nr);
+		if (ret != 1)
+			return -1;
+		ret = seccomp_add_rule(SCMP_ACT_ALLOW, nr, 0);
+		if (ret < 0) {
+			ERROR("failed loading allow rule for %d\n", nr);
+			return ret;
+		}
+	}
+	return 0;
+}
+
 int lxc_read_seccomp_config(struct lxc_conf *conf)
 {
+	FILE *f;
+
+	if (!seccomp_init(SCMP_ACT_KILL))  { /* for debug, pass in SCMP_ACT_TRAP */
+		ERROR("failed initializing seccomp");
+		return -1;
+	}
+	if (!conf->seccomp)
+		return 0;
+	f = fopen(conf->seccomp, "r");
+	if (!f) {
+		SYSERROR("failed to open seccomp policy file %s\n", conf->seccomp);
+		return -1;
+	}
+	ret = parse_config(f, conf);
+	fclose(f);
+	return ret;
 }
 
 int lxc_seccomp_load(struct lxc_conf *conf)
 {
+	int ret;
+	if (!conf->seccomp)
+		return 0;
+	ret = seccomp_policy_load();
+	if (ret < 0) {
+		ERROR("Error loading the seccomp policy");
+		return -1;
+	}
+	return 0;
 }
