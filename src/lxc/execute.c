@@ -21,9 +21,14 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
+#define _GNU_SOURCE
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <fcntl.h>
+#include <grp.h>
 
 #include "log.h"
 #include "start.h"
@@ -63,6 +68,57 @@ static int execute_start(struct lxc_handler *handler, void* data)
 	return 1;
 }
 
+static int execute_start_noinit(struct lxc_handler *handler, void* data)
+{
+	struct execute_args *my_args = data;
+
+	/* FIXME: the following values should come from config/cmdline args */
+	const char *log = "/instance/log";
+	const gid_t gid = 1001;
+	const uid_t uid = 1001;
+
+	if (setgroups(1, &gid) < 0) {
+		SYSERROR("failed to change groups to '%d'", gid);
+		return 1;
+	}
+
+	if (setresgid(gid, gid, gid)) {
+		SYSERROR("failed to change real, effective, saved gid to '%d'",
+			 gid);
+		return 1;
+	}
+
+	if (setresuid(uid, uid, uid)) {
+		SYSERROR("failed to change real, effective, saved uid to '%d'",
+			 uid);
+		return 1;
+	}
+
+	int fd = open(log, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	if (fd < 0) {
+		SYSERROR("failed to open log '%s'", log);
+		return 1;
+	}
+
+	fd = dup2(fd, 1);
+	if (fd < 0) {
+		SYSERROR("failed to redirect stdout");
+		return 1;
+	}
+
+	fd = dup2(1, 2);
+	if (fd < 0) {
+		SYSERROR("failed to redirect stderr");
+		return -1;
+	}
+
+	NOTICE("exec'ing '%s'", my_args->argv[0]);
+	execvp(my_args->argv[0], my_args->argv);
+	SYSERROR("failed to exec %s", my_args->argv[0]);
+
+	return 1;
+}
+
 static int execute_post_start(struct lxc_handler *handler, void* data)
 {
 	struct execute_args *my_args = data;
@@ -71,7 +127,7 @@ static int execute_post_start(struct lxc_handler *handler, void* data)
 }
 
 static struct lxc_operations execute_start_ops = {
-	.start = execute_start,
+	.start = execute_start_noinit,
 	.post_start = execute_post_start
 };
 

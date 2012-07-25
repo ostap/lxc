@@ -57,6 +57,7 @@ static int my_checker(const struct lxc_arguments* args)
 static int my_parser(struct lxc_arguments* args, int c, char* arg)
 {
 	switch (c) {
+	case 'd': args->daemonize = 1; args->close_all_fds = 1; break;
 	case 'f': args->rcfile = arg; break;
 	case 's': return lxc_config_define_add(&defines, arg);
 	}
@@ -64,6 +65,7 @@ static int my_parser(struct lxc_arguments* args, int c, char* arg)
 }
 
 static const struct option my_longopts[] = {
+	{"daemon", no_argument, 0, 'd'},
 	{"rcfile", required_argument, 0, 'f'},
 	{"define", required_argument, 0, 's'},
 	LXC_COMMON_OPTIONS
@@ -79,6 +81,8 @@ and execs COMMAND into this container.\n\
 \n\
 Options :\n\
   -n, --name=NAME      NAME for name of the container\n\
+  -d, --daemon         daemonize the container\n\
+  -O, --output=FILE    Redirect stdout/stderr to FILE\n\
   -f, --rcfile=FILE    Load configuration file FILE\n\
   -s, --define KEY=VAL Assign VAL to configuration variable KEY\n",
 	.options  = my_longopts,
@@ -135,6 +139,11 @@ int main(int argc, char *argv[])
 
 	if (lxc_config_define_load(&defines, conf))
 		return -1;
+
+	if (my_args.daemonize && daemon(0, 0)) {
+		SYSERROR("failed to daemonize '%s'", my_args.name);
+		return -1;
+	}
 
 	return lxc_execute(my_args.name, my_args.argv, my_args.quiet, conf);
 }
