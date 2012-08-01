@@ -63,10 +63,14 @@ extern int lxc_stop(const char *name);
  * @argv     : an array of char * corresponding to the commande line
  * @quiet    : if != 0 then lxc-init won't produce any output
  * @conf     : configuration
+ * @uid      : user id to use within the container
+ * @gid      : group id to use within the container
+ * @ofile    : output file (redirects stdout/stderr)
  * Returns 0 on sucess, < 0 otherwise
  */
 extern int lxc_execute(const char *name, char *const argv[], int quiet,
-		       struct lxc_conf *conf);
+		       struct lxc_conf *conf, int uid, int gid,
+		       const char *ofile);
 
 /*
  * Open the monitoring mechanism for a specific container

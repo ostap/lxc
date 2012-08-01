@@ -58,6 +58,11 @@ struct lxc_arguments {
 	/* for lxc-wait */
 	char *states;
 
+	/* for lxc-execute extension */
+	const char *uid;
+	const char *gid;
+	const char *ofile;
+
 	/* close fds from parent? */
 	int close_all_fds;
 

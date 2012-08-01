@@ -44,10 +44,38 @@ lxc_log_define(lxc_execute_ui, lxc_execute);
 
 static struct lxc_list defines;
 
+static int invalid_num(const char *s)
+{
+	char *endptr = NULL;
+	long int num = strtol(s, &endptr, 10);
+	return num == 0 && (endptr == NULL || *endptr != '\0');
+}
+
 static int my_checker(const struct lxc_arguments* args)
 {
 	if (!args->argc) {
 		lxc_error(args, "missing command to execute !");
+		return -1;
+	}
+
+	if (!args->uid) {
+		lxc_error(args, "missing user id, use -u option");
+		return -1;
+	} else if (invalid_num(args->uid)) {
+		lxc_error(args, "invalid user id, expected integer identifier");
+		return -1;
+	}
+
+	if (!args->gid) {
+		lxc_error(args, "missing group id, use -g option");
+		return -1;
+	} else if (invalid_num(args->gid)) {
+		lxc_error(args, "invalid group id, expected integer identifier");
+		return -1;
+	}
+
+	if (!args->ofile) {
+		lxc_error(args, "missing output file, use -O option");
 		return -1;
 	}
 
@@ -57,17 +85,23 @@ static int my_checker(const struct lxc_arguments* args)
 static int my_parser(struct lxc_arguments* args, int c, char* arg)
 {
 	switch (c) {
-	case 'd': args->daemonize = 1; args->close_all_fds = 1; break;
 	case 'f': args->rcfile = arg; break;
-	case 's': return lxc_config_define_add(&defines, arg);
+	case 's': return lxc_config_define_add(&defines, arg); break;
+	case 'd': args->daemonize = 1; args->close_all_fds = 1; break;
+	case 'u': args->uid = arg; break;
+	case 'g': args->gid = arg; break;
+	case 'O': args->ofile = arg; break;
 	}
 	return 0;
 }
 
 static const struct option my_longopts[] = {
-	{"daemon", no_argument, 0, 'd'},
 	{"rcfile", required_argument, 0, 'f'},
 	{"define", required_argument, 0, 's'},
+	{"daemon", no_argument, 0, 'd'},
+	{"group", required_argument, 0, 'g'},
+	{"output", required_argument, 0, 'O'},
+	{"user", required_argument, 0, 'u'},
 	LXC_COMMON_OPTIONS
 };
 
@@ -83,6 +117,8 @@ Options :\n\
   -n, --name=NAME      NAME for name of the container\n\
   -d, --daemon         daemonize the container\n\
   -O, --output=FILE    Redirect stdout/stderr to FILE\n\
+  -u, --user=uid       Use this user id within the container\n\
+  -g, --group=gid      Use this group id within the container\n\
   -f, --rcfile=FILE    Load configuration file FILE\n\
   -s, --define KEY=VAL Assign VAL to configuration variable KEY\n",
 	.options  = my_longopts,
@@ -145,5 +181,6 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	return lxc_execute(my_args.name, my_args.argv, my_args.quiet, conf);
+	return lxc_execute(my_args.name, my_args.argv, my_args.quiet, conf,
+			   atoi(my_args.uid), atoi(my_args.gid), my_args.ofile);
 }

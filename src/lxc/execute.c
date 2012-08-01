@@ -38,6 +38,9 @@ lxc_log_define(lxc_execute, lxc_start);
 struct execute_args {
 	char *const *argv;
 	int quiet;
+	uid_t uid;
+	gid_t gid;
+	const char *ofile;
 };
 
 static int execute_start(struct lxc_handler *handler, void* data)
@@ -72,31 +75,26 @@ static int execute_start_noinit(struct lxc_handler *handler, void* data)
 {
 	struct execute_args *my_args = data;
 
-	/* FIXME: the following values should come from config/cmdline args */
-	const char *log = "/instance/log";
-	const gid_t gid = 1001;
-	const uid_t uid = 1001;
-
-	if (setgroups(1, &gid) < 0) {
-		SYSERROR("failed to change groups to '%d'", gid);
+	if (setgroups(1, &my_args->gid) < 0) {
+		SYSERROR("failed to change groups to '%d'", my_args->gid);
 		return 1;
 	}
 
-	if (setresgid(gid, gid, gid)) {
+	if (setresgid(my_args->gid, my_args->gid, my_args->gid)) {
 		SYSERROR("failed to change real, effective, saved gid to '%d'",
-			 gid);
+			 my_args->gid);
 		return 1;
 	}
 
-	if (setresuid(uid, uid, uid)) {
+	if (setresuid(my_args->uid, my_args->uid, my_args->uid)) {
 		SYSERROR("failed to change real, effective, saved uid to '%d'",
-			 uid);
+			 my_args->uid);
 		return 1;
 	}
 
-	int fd = open(log, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	int fd = open(my_args->ofile, O_RDWR | O_APPEND | O_CREAT, 0600);
 	if (fd < 0) {
-		SYSERROR("failed to open log '%s'", log);
+		SYSERROR("failed to open log '%s'", my_args->ofile);
 		return 1;
 	}
 
@@ -132,11 +130,15 @@ static struct lxc_operations execute_start_ops = {
 };
 
 int lxc_execute(const char *name, char *const argv[], int quiet,
-		struct lxc_conf *conf)
+		struct lxc_conf *conf, int uid, int gid,
+		const char *ofile)
 {
 	struct execute_args args = {
 		.argv = argv,
-		.quiet = quiet
+		.quiet = quiet,
+		.uid = uid,
+		.gid = gid,
+		.ofile = ofile
 	};
 
 	if (lxc_check_inherited(conf, -1))
