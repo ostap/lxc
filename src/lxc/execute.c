@@ -92,7 +92,7 @@ static int execute_start_noinit(struct lxc_handler *handler, void* data)
 		return 1;
 	}
 
-	int fd = open(my_args->ofile, O_RDWR | O_APPEND | O_CREAT, 0600);
+	int fd = open(my_args->ofile, O_RDWR | O_TRUNC | O_CREAT, 0600);
 	if (fd < 0) {
 		SYSERROR("failed to open log '%s'", my_args->ofile);
 		return 1;
